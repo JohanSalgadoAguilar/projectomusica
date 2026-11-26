@@ -200,7 +200,7 @@ a { color: var(--amber); }
 }
 .track {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) 160px 72px 112px 56px;
+    grid-template-columns: 52px minmax(0, 1fr) 160px 72px 112px 92px;
     align-items: center;
     gap: .75rem;
     padding: .65rem 1rem .65rem .85rem;
@@ -242,6 +242,9 @@ a { color: var(--amber); }
     padding: 0;
 }
 .icon-btn:hover { color: var(--text); background: var(--raised); }
+.icon-btn-danger:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.row-actions { display: flex; gap: .4rem; justify-content: flex-end; }
+.row-actions form { margin: 0; }
 
 .empty {
     padding: 3rem 1.5rem;
@@ -251,7 +254,7 @@ a { color: var(--amber); }
 .empty strong { display: block; color: var(--text); font-family: var(--font-display); font-size: 1.15rem; margin-bottom: .25rem; }
 
 @media (max-width: 767.98px) {
-    .track { grid-template-columns: 52px minmax(0, 1fr) 44px; }
+    .track { grid-template-columns: 52px minmax(0, 1fr) auto; }
     .track-head { display: none; }
     .col-genre, .col-dur, .col-rate { display: none; }
 }

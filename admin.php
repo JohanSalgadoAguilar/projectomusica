@@ -78,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                             if (move_uploaded_file($_FILES['archivo_mp3']['tmp_name'], $ruta_absoluta)) {
                                 try {
-                                    $stmt = $pdo->prepare("INSERT INTO canciones (id_genero, nombre, tipo, duracion, calificacion, ruta_archivo) VALUES (?, ?, ?, ?, ?, ?)");
-                                    $stmt->execute([$id_genero, $nombre, $tipo, $duracion, $calificacion, $ruta_relativa]);
+                                    $stmt = $pdo->prepare("INSERT INTO canciones (id_genero, nombre, tipo, duracion, calificacion, ruta_archivo, id_usuario) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                                    $stmt->execute([$id_genero, $nombre, $tipo, $duracion, $calificacion, $ruta_relativa, (int)$_SESSION['id_usuario']]);
                                     $mensaje = "Canción añadida correctamente.";
                                 } catch (PDOException $e) {
                                     @unlink($ruta_absoluta);
@@ -142,9 +142,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $generos = $pdo->query("SELECT * FROM generos ORDER BY id_genero ASC")->fetchAll();
 $canciones = $pdo->query("
-    SELECT c.*, g.nombre AS genero_nombre
+    SELECT c.*, g.nombre AS genero_nombre, u.nombre_usuario AS subido_por
     FROM canciones c
     INNER JOIN generos g ON c.id_genero = g.id_genero
+    LEFT JOIN usuarios u ON c.id_usuario = u.id_usuario
     ORDER BY c.id_cancion DESC
 ")->fetchAll();
 $usuarios = $pdo->query("SELECT id_usuario, nombre_usuario, password, rol FROM usuarios ORDER BY id_usuario ASC")->fetchAll();
@@ -281,7 +282,8 @@ $inicial = mb_strtoupper(mb_substr($_SESSION['nombre_usuario'], 0, 1));
                             <th>Género</th>
                             <th>Duración</th>
                             <th>Calificación</th>
-                            <th>Subida</th>
+                            <th>Subida por</th>
+                            <th>Fecha</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -303,6 +305,7 @@ $inicial = mb_strtoupper(mb_substr($_SESSION['nombre_usuario'], 0, 1));
                                     <td class="stars" role="img" aria-label="Calificación <?= $estrellas ?> de 5">
                                         <?= str_repeat('★', $estrellas) ?><span class="off"><?= str_repeat('★', 5 - $estrellas) ?></span>
                                     </td>
+                                    <td class="text-muted-2 small"><?= htmlspecialchars($c['subido_por'] ?? '—') ?></td>
                                     <td class="text-muted-2 small"><?= $fecha ?></td>
                                     <td>
                                         <div class="actions">
@@ -327,7 +330,7 @@ $inicial = mb_strtoupper(mb_substr($_SESSION['nombre_usuario'], 0, 1));
                             <?php endforeach; ?>
                         <?php else: ?>
                             <tr>
-                                <td colspan="6">
+                                <td colspan="7">
                                     <div class="empty">
                                         <strong>Aún no hay canciones</strong>
                                         Sube tu primer MP3 con el formulario de la izquierda.

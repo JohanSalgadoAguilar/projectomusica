@@ -44,6 +44,9 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
 
 $inicial = mb_strtoupper(mb_substr($_SESSION['nombre_usuario'], 0, 1));
 $es_admin = ($_SESSION['rol'] === 'admin');
+$id_sesion = (int)$_SESSION['id_usuario'];
+$mensaje = $_GET['msg'] ?? '';
+$error = $_GET['error'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="es" data-bs-theme="dark">
@@ -90,7 +93,15 @@ $es_admin = ($_SESSION['rol'] === 'admin');
             <h1>Biblioteca</h1>
             <p><?= count($canciones) ?> <?= count($canciones) === 1 ? 'canción' : 'canciones' ?><?= $genero_actual > 0 ? ' en este género' : '' ?></p>
         </div>
+        <button type="button" class="btn btn-amber" data-bs-toggle="modal" data-bs-target="#subirModal">Subir canción</button>
     </div>
+
+    <?php if ($mensaje): ?>
+        <div class="notice ok mb-3" role="status"><?= htmlspecialchars($mensaje) ?></div>
+    <?php endif; ?>
+    <?php if ($error): ?>
+        <div class="notice err mb-3" role="alert"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
 
     <nav class="pills" aria-label="Filtrar por género">
         <a href="?genero=0" class="pill pill-all <?= $genero_actual === 0 ? 'active' : '' ?>">
@@ -123,6 +134,7 @@ $es_admin = ($_SESSION['rol'] === 'admin');
                     $url_audio  = $ruta_base . ltrim($c['ruta_archivo'], '/');
                     $estrellas  = max(1, min(5, (int)$c['calificacion']));
                     $fecha      = $c['fecha_subida'] ? date('d/m/Y', strtotime($c['fecha_subida'])) : '';
+                    $puede_borrar = $es_admin || ($c['id_usuario'] !== null && (int)$c['id_usuario'] === $id_sesion);
                 ?>
                 <div class="track g-<?= $gid ?>"
                      data-src="<?= htmlspecialchars($c['ruta_archivo']) ?>"
@@ -149,7 +161,7 @@ $es_admin = ($_SESSION['rol'] === 'admin');
                         <?= str_repeat('★', $estrellas) ?><span class="off"><?= str_repeat('★', 5 - $estrellas) ?></span>
                     </div>
 
-                    <div>
+                    <div class="row-actions">
                         <button type="button" class="icon-btn qr-btn"
                                 data-url="<?= htmlspecialchars($url_audio) ?>"
                                 data-title="<?= htmlspecialchars($c['nombre']) ?>"
@@ -160,17 +172,23 @@ $es_admin = ($_SESSION['rol'] === 'admin');
                                 <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20h1"/>
                             </svg>
                         </button>
+                        <?php if ($puede_borrar): ?>
+                            <form method="POST" action="cancion_proceso.php" data-confirm="¿Eliminar «<?= htmlspecialchars($c['nombre']) ?>»? También se borrará el archivo de audio.">
+                                <input type="hidden" name="accion" value="eliminar_cancion">
+                                <input type="hidden" name="id_cancion" value="<?= (int)$c['id_cancion'] ?>">
+                                <input type="hidden" name="volver_genero" value="<?= $genero_actual ?>">
+                                <button type="submit" class="icon-btn icon-btn-danger" aria-label="Eliminar <?= htmlspecialchars($c['nombre']) ?>" title="Eliminar">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/></svg>
+                                </button>
+                            </form>
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>
         <?php else: ?>
             <div class="empty">
                 <strong>No hay canciones en esta selección</strong>
-                <?php if ($es_admin): ?>
-                    Sube la primera desde el <a href="admin.php">panel de administración</a>.
-                <?php else: ?>
-                    Prueba con otro género o vuelve más tarde.
-                <?php endif; ?>
+                Sube la primera con el botón «Subir canción».
             </div>
         <?php endif; ?>
     </div>
@@ -212,6 +230,76 @@ $es_admin = ($_SESSION['rol'] === 'admin');
         </div>
     </div>
     <audio id="audio" preload="none"></audio>
+</div>
+
+<!-- Modal subir canción -->
+<div class="modal fade" id="subirModal" tabindex="-1" aria-labelledby="subirTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" action="cancion_proceso.php" enctype="multipart/form-data" id="formSubir">
+                <div class="modal-header">
+                    <h5 class="modal-title fs-5" id="subirTitle">Subir canción</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="accion" value="agregar_cancion">
+                    <input type="hidden" name="volver_genero" value="<?= $genero_actual ?>">
+
+                    <div class="mb-3">
+                        <label class="form-label" for="s_nombre">Nombre</label>
+                        <input type="text" id="s_nombre" name="nombre" class="form-control" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="s_archivo">Archivo MP3</label>
+                        <div class="dropzone" id="s_zona">
+                            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+                            <span class="file-name" id="s_fileName">Arrastra un MP3 aquí o haz clic para elegirlo</span>
+                            <input type="file" id="s_archivo" name="archivo_mp3" accept=".mp3,audio/mpeg" required>
+                        </div>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label" for="s_tipo">Tipo</label>
+                            <select id="s_tipo" name="tipo" class="form-select">
+                                <option value="MP3">MP3</option>
+                                <option value="Sencillo">Sencillo</option>
+                                <option value="Álbum">Álbum</option>
+                                <option value="En Vivo">En Vivo</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="s_duracion">Duración</label>
+                            <input type="text" id="s_duracion" name="duracion" class="form-control" placeholder="03:30" required>
+                        </div>
+                        <div class="col-7">
+                            <label class="form-label" for="s_genero">Género</label>
+                            <select id="s_genero" name="id_genero" class="form-select" required>
+                                <?php foreach ($generos as $g): ?>
+                                    <option value="<?= (int)$g['id_genero'] ?>" <?= (int)$g['id_genero'] === $genero_actual ? 'selected' : '' ?>><?= htmlspecialchars($g['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label" for="s_calif">Calificación</label>
+                            <select id="s_calif" name="calificacion" class="form-select" required>
+                                <option value="5">5 ★</option>
+                                <option value="4">4 ★</option>
+                                <option value="3">3 ★</option>
+                                <option value="2">2 ★</option>
+                                <option value="1">1 ★</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-quiet" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-amber" id="s_guardar">Guardar canción</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- Modal QR -->
@@ -335,6 +423,51 @@ $es_admin = ($_SESSION['rol'] === 'admin');
         });
     });
 })();
+</script>
+
+<script>
+// Confirmación antes de eliminar
+document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+        if (!confirm(f.dataset.confirm)) e.preventDefault();
+    });
+});
+
+// Subida: muestra el nombre del archivo y calcula la duración
+document.getElementById('s_archivo').addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    const zona = document.getElementById('s_zona');
+    if (!file) {
+        zona.classList.remove('has-file');
+        document.getElementById('s_fileName').textContent = 'Arrastra un MP3 aquí o haz clic para elegirlo';
+        return;
+    }
+    zona.classList.add('has-file');
+    document.getElementById('s_fileName').textContent = file.name + ' (' + (file.size / 1048576).toFixed(1) + ' MB)';
+
+    const nombre = document.getElementById('s_nombre');
+    if (!nombre.value) nombre.value = file.name.replace(/\.mp3$/i, '').replace(/_+/g, ' ');
+
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = function () {
+        URL.revokeObjectURL(url);
+        if (!isNaN(audio.duration) && isFinite(audio.duration)) {
+            const total = Math.round(audio.duration);
+            document.getElementById('s_duracion').value =
+                String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+        }
+    };
+    audio.onerror = function () { URL.revokeObjectURL(url); };
+    audio.src = url;
+});
+
+document.getElementById('formSubir').addEventListener('submit', function () {
+    const b = document.getElementById('s_guardar');
+    b.disabled = true;
+    b.textContent = 'Subiendo…';
+});
 </script>
 
 </body>
