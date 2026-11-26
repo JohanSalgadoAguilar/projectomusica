@@ -21,83 +21,118 @@ $carpetas_genero = [
     4 => 'uploads/urbano/'
 ];
 
+$codigos_error_subida = [
+    UPLOAD_ERR_INI_SIZE   => 'El archivo supera upload_max_filesize del servidor.',
+    UPLOAD_ERR_FORM_SIZE  => 'El archivo supera el límite del formulario.',
+    UPLOAD_ERR_PARTIAL    => 'El archivo se subió solo parcialmente.',
+    UPLOAD_ERR_NO_FILE    => 'No se seleccionó ningún archivo.',
+    UPLOAD_ERR_NO_TMP_DIR => 'Falta la carpeta temporal en el servidor.',
+    UPLOAD_ERR_CANT_WRITE => 'No se pudo escribir el archivo en disco.',
+    UPLOAD_ERR_EXTENSION  => 'Una extensión de PHP detuvo la subida.',
+];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $accion = $_POST['accion'] ?? '';
-
-    if ($accion === 'agregar_cancion') {
-        $id_genero    = (int)$_POST['id_genero'];
-        $nombre       = trim($_POST['nombre']);
-        $tipo         = trim($_POST['tipo']) ?: 'MP3';
-        $duracion     = trim($_POST['duracion']) ?: '03:30';
-        $calificacion = max(1, min(5, (int)$_POST['calificacion']));
-
-        if (!isset($carpetas_genero[$id_genero])) {
-            $error = "Género inválido.";
-        } elseif (!isset($_FILES['archivo_mp3']) || $_FILES['archivo_mp3']['error'] !== UPLOAD_ERR_OK) {
-            $error = "Debes seleccionar un archivo MP3 válido.";
-        } else {
-            $ext = strtolower(pathinfo($_FILES['archivo_mp3']['name'], PATHINFO_EXTENSION));
-            if ($ext !== 'mp3') {
-                $error = "Solo se permiten archivos .mp3.";
-            } else {
-                $carpeta_destino = $carpetas_genero[$id_genero];
-                if (!is_dir($carpeta_destino)) {
-                    mkdir($carpeta_destino, 0755, true);
-                }
-
-                $nombre_limpio = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($_FILES['archivo_mp3']['name'], PATHINFO_FILENAME));
-                $nombre_final  = $nombre_limpio . '_' . time() . '.mp3';
-                $ruta_relativa = $carpeta_destino . $nombre_final;
-
-                if (move_uploaded_file($_FILES['archivo_mp3']['tmp_name'], $ruta_relativa)) {
-                    $stmt = $pdo->prepare("INSERT INTO canciones (id_genero, nombre, tipo, duracion, calificacion, ruta_archivo) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$id_genero, $nombre, $tipo, $duracion, $calificacion, $ruta_relativa]);
-                    $mensaje = "Canción añadida correctamente.";
-                } else {
-                    $error = "No se pudo mover el archivo a la carpeta de destino.";
-                }
-            }
-        }
-    }
-
-    if ($accion === 'eliminar_cancion') {
-        $id_cancion = (int)$_POST['id_cancion'];
-        $stmt = $pdo->prepare("SELECT ruta_archivo FROM canciones WHERE id_cancion = ?");
-        $stmt->execute([$id_cancion]);
-        $cancion = $stmt->fetch();
-
-        if ($cancion) {
-            if (!empty($cancion['ruta_archivo']) && file_exists($cancion['ruta_archivo'])) {
-                unlink($cancion['ruta_archivo']);
-            }
-            $del = $pdo->prepare("DELETE FROM canciones WHERE id_cancion = ?");
-            $del->execute([$id_cancion]);
-            $mensaje = "Canción eliminada.";
-        }
-    }
-
-    if ($accion === 'agregar_usuario') {
-        $nombre_usuario = trim($_POST['nombre_usuario']);
-        $password       = $_POST['password'];
-        $rol            = ($_POST['rol'] === 'admin') ? 'admin' : 'consultor';
+    // Si el archivo supera post_max_size, PHP vacía $_POST y $_FILES por completo
+    if (empty($_POST) && empty($_FILES) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+        $error = "El envío supera post_max_size del servidor (" . ini_get('post_max_size') . "). Prueba con un MP3 más ligero.";
+    } else {
+        $accion = $_POST['accion'] ?? '';
 
         try {
-            $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password, rol) VALUES (?, ?, ?)");
-            $stmt->execute([$nombre_usuario, $password, $rol]);
-            $mensaje = "Usuario creado con rol '$rol'.";
-        } catch (PDOException $e) {
-            $error = "Ese nombre de usuario ya existe.";
-        }
-    }
+            if ($accion === 'agregar_cancion') {
+                $id_genero    = (int)($_POST['id_genero'] ?? 0);
+                $nombre       = trim($_POST['nombre'] ?? '');
+                $tipo         = trim($_POST['tipo'] ?? 'MP3') ?: 'MP3';
+                $duracion     = trim($_POST['duracion'] ?? '03:30') ?: '03:30';
+                $calificacion = max(1, min(5, (int)($_POST['calificacion'] ?? 5)));
 
-    if ($accion === 'eliminar_usuario') {
-        $id_eliminar = (int)$_POST['id_usuario'];
-        if ($id_eliminar === (int)$_SESSION['id_usuario']) {
-            $error = "No puedes eliminar tu propia cuenta activa.";
-        } else {
-            $del = $pdo->prepare("DELETE FROM usuarios WHERE id_usuario = ?");
-            $del->execute([$id_eliminar]);
-            $mensaje = "Usuario eliminado.";
+                if (!isset($carpetas_genero[$id_genero])) {
+                    $error = "Género inválido.";
+                } elseif (!isset($_FILES['archivo_mp3'])) {
+                    $error = "No se recibió ningún archivo (puede superar el límite de subida del servidor).";
+                } elseif ($_FILES['archivo_mp3']['error'] !== UPLOAD_ERR_OK) {
+                    $cod = (int)$_FILES['archivo_mp3']['error'];
+                    $error = "Error al subir el archivo (código $cod): " . ($codigos_error_subida[$cod] ?? 'Error desconocido.');
+                } else {
+                    $ext = strtolower(pathinfo($_FILES['archivo_mp3']['name'], PATHINFO_EXTENSION));
+                    if ($ext !== 'mp3') {
+                        $error = "Solo se permiten archivos .mp3.";
+                    } else {
+                        $carpeta_relativa = $carpetas_genero[$id_genero];
+                        $carpeta_absoluta = __DIR__ . '/' . $carpeta_relativa;
+
+                        if (!is_dir($carpeta_absoluta) && !mkdir($carpeta_absoluta, 0755, true) && !is_dir($carpeta_absoluta)) {
+                            $error = "No se pudo crear la carpeta en el servidor: " . $carpeta_relativa . " (créala manualmente desde el administrador de archivos).";
+                        } else {
+                            $nombre_limpio = preg_replace('/[^a-zA-Z0-9_-]/', '_', pathinfo($_FILES['archivo_mp3']['name'], PATHINFO_FILENAME));
+                            if ($nombre_limpio === '') {
+                                $nombre_limpio = 'audio';
+                            }
+                            $nombre_final  = $nombre_limpio . '_' . time() . '.mp3';
+                            $ruta_relativa = $carpeta_relativa . $nombre_final;   // se guarda en la BD
+                            $ruta_absoluta = $carpeta_absoluta . $nombre_final;   // ruta real en disco
+
+                            if (move_uploaded_file($_FILES['archivo_mp3']['tmp_name'], $ruta_absoluta)) {
+                                try {
+                                    $stmt = $pdo->prepare("INSERT INTO canciones (id_genero, nombre, tipo, duracion, calificacion, ruta_archivo) VALUES (?, ?, ?, ?, ?, ?)");
+                                    $stmt->execute([$id_genero, $nombre, $tipo, $duracion, $calificacion, $ruta_relativa]);
+                                    $mensaje = "Canción añadida correctamente.";
+                                } catch (PDOException $e) {
+                                    @unlink($ruta_absoluta);
+                                    $error = "Error en la base de datos: " . $e->getMessage();
+                                }
+                            } else {
+                                $error = "No se pudo guardar el archivo. Revisa los permisos de la carpeta: " . $carpeta_relativa;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($accion === 'eliminar_cancion') {
+                $id_cancion = (int)($_POST['id_cancion'] ?? 0);
+                $stmt = $pdo->prepare("SELECT ruta_archivo FROM canciones WHERE id_cancion = ?");
+                $stmt->execute([$id_cancion]);
+                $cancion = $stmt->fetch();
+
+                if ($cancion) {
+                    $ruta_disco = __DIR__ . '/' . ltrim($cancion['ruta_archivo'] ?? '', '/');
+                    if (!empty($cancion['ruta_archivo']) && is_file($ruta_disco)) {
+                        @unlink($ruta_disco);
+                    }
+                    $del = $pdo->prepare("DELETE FROM canciones WHERE id_cancion = ?");
+                    $del->execute([$id_cancion]);
+                    $mensaje = "Canción eliminada.";
+                }
+            }
+
+            if ($accion === 'agregar_usuario') {
+                $nombre_usuario = trim($_POST['nombre_usuario'] ?? '');
+                $password       = $_POST['password'] ?? '';
+                $rol            = (($_POST['rol'] ?? 'consultor') === 'admin') ? 'admin' : 'consultor';
+
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password, rol) VALUES (?, ?, ?)");
+                    $stmt->execute([$nombre_usuario, $password, $rol]);
+                    $mensaje = "Usuario creado con rol '$rol'.";
+                } catch (PDOException $e) {
+                    $error = "Ese nombre de usuario ya existe.";
+                }
+            }
+
+            if ($accion === 'eliminar_usuario') {
+                $id_eliminar = (int)($_POST['id_usuario'] ?? 0);
+                if ($id_eliminar === (int)$_SESSION['id_usuario']) {
+                    $error = "No puedes eliminar tu propia cuenta activa.";
+                } else {
+                    $del = $pdo->prepare("DELETE FROM usuarios WHERE id_usuario = ?");
+                    $del->execute([$id_eliminar]);
+                    $mensaje = "Usuario eliminado.";
+                }
+            }
+        } catch (Throwable $e) {
+            // Evita el HTTP 500 en blanco y muestra el motivo real
+            $error = "Error inesperado: " . $e->getMessage();
         }
     }
 }
@@ -155,6 +190,11 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                             <input type="text" name="nombre" class="form-control" required>
                         </div>
 
+                        <div class="mb-2">
+                            <label class="form-label">Archivo MP3</label>
+                            <input type="file" id="archivo_mp3" name="archivo_mp3" accept=".mp3,audio/mpeg" class="form-control" required>
+                        </div>
+
                         <div class="row g-2 mb-2">
                             <div class="col-6">
                                 <label class="form-label">Tipo</label>
@@ -167,11 +207,11 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                             </div>
                             <div class="col-6">
                                 <label class="form-label">Duración</label>
-                                <input type="text" name="duracion" class="form-control" placeholder="03:30" required>
+                                <input type="text" id="duracion" name="duracion" class="form-control" placeholder="03:30" required>
                             </div>
                         </div>
 
-                        <div class="row g-2 mb-2">
+                        <div class="row g-2 mb-3">
                             <div class="col-7">
                                 <label class="form-label">Género</label>
                                 <select name="id_genero" class="form-select" required>
@@ -190,11 +230,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                                     <option value="1">1 ★</option>
                                 </select>
                             </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label">Archivo MP3</label>
-                            <input type="file" name="archivo_mp3" accept=".mp3,audio/mpeg" class="form-control" required>
                         </div>
 
                         <button type="submit" class="btn btn-success w-100">Guardar Canción</button>
@@ -333,6 +368,33 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('archivo_mp3').addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+    const audio = new Audio();
+    audio.preload = 'metadata';
+
+    audio.onloadedmetadata = function () {
+        URL.revokeObjectURL(url);
+        if (!isNaN(audio.duration) && isFinite(audio.duration)) {
+            const totalSeg = Math.round(audio.duration);
+            const mins = String(Math.floor(totalSeg / 60)).padStart(2, '0');
+            const segs = String(totalSeg % 60).padStart(2, '0');
+            document.getElementById('duracion').value = `${mins}:${segs}`;
+        }
+    };
+
+    audio.onerror = function () {
+        URL.revokeObjectURL(url);
+    };
+
+    audio.src = url;
+});
+</script>
 
 </body>
 </html>
