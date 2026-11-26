@@ -21,16 +21,14 @@ $carpetas_genero = [
     4 => 'uploads/urbano/'
 ];
 
-// --- ACCIONES POST ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accion = $_POST['accion'] ?? '';
 
-    // 1. AÑADIR CANCIÓN
     if ($accion === 'agregar_cancion') {
         $id_genero    = (int)$_POST['id_genero'];
         $nombre       = trim($_POST['nombre']);
         $tipo         = trim($_POST['tipo']) ?: 'MP3';
-        $duracion     = trim($_POST['duracion']) ?: '03:00';
+        $duracion     = trim($_POST['duracion']) ?: '03:30';
         $calificacion = max(1, min(5, (int)$_POST['calificacion']));
 
         if (!isset($carpetas_genero[$id_genero])) {
@@ -62,7 +60,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 2. ELIMINAR CANCIÓN
     if ($accion === 'eliminar_cancion') {
         $id_cancion = (int)$_POST['id_cancion'];
         $stmt = $pdo->prepare("SELECT ruta_archivo FROM canciones WHERE id_cancion = ?");
@@ -79,22 +76,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 3. AÑADIR USUARIO (Solo usuario y contraseña)
     if ($accion === 'agregar_usuario') {
         $nombre_usuario = trim($_POST['nombre_usuario']);
-        $password_hash  = password_hash($_POST['password'], PASSWORD_DEFAULT);
+        $password       = $_POST['password'];
         $rol            = ($_POST['rol'] === 'admin') ? 'admin' : 'consultor';
 
         try {
-            $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password_hash, rol) VALUES (?, ?, ?)");
-            $stmt->execute([$nombre_usuario, $password_hash, $rol]);
+            $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password, rol) VALUES (?, ?, ?)");
+            $stmt->execute([$nombre_usuario, $password, $rol]);
             $mensaje = "Usuario creado con rol '$rol'.";
         } catch (PDOException $e) {
             $error = "Ese nombre de usuario ya existe.";
         }
     }
 
-    // 4. ELIMINAR USUARIO
     if ($accion === 'eliminar_usuario') {
         $id_eliminar = (int)$_POST['id_usuario'];
         if ($id_eliminar === (int)$_SESSION['id_usuario']) {
@@ -107,19 +102,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Consultas para llenar las tablas
 $generos = $pdo->query("SELECT * FROM generos ORDER BY id_genero ASC")->fetchAll();
-
 $canciones = $pdo->query("
-    SELECT c.*, g.nombre AS genero_nombre 
-    FROM canciones c 
-    INNER JOIN generos g ON c.id_genero = g.id_genero 
+    SELECT c.*, g.nombre AS genero_nombre
+    FROM canciones c
+    INNER JOIN generos g ON c.id_genero = g.id_genero
     ORDER BY c.id_cancion DESC
 ")->fetchAll();
+$usuarios = $pdo->query("SELECT id_usuario, nombre_usuario, password, rol FROM usuarios ORDER BY id_usuario ASC")->fetchAll();
 
-$usuarios = $pdo->query("SELECT id_usuario, nombre_usuario, rol FROM usuarios ORDER BY id_usuario ASC")->fetchAll();
-
-// URL base del sitio para generar los códigos QR
 $protocolo = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
 $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/\\') . '/';
 ?>
@@ -150,7 +141,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
         <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
 
-    <!-- SECCIÓN MÚSICA -->
     <h3 class="mb-3">🎵 Gestión de Música</h3>
     <div class="row g-4 mb-5">
         <div class="col-lg-3">
@@ -159,10 +149,10 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                     <h5 class="card-title mb-3">Añadir Canción</h5>
                     <form method="POST" enctype="multipart/form-data">
                         <input type="hidden" name="accion" value="agregar_cancion">
-                        
+
                         <div class="mb-2">
                             <label class="form-label">Nombre</label>
-                            <input type="text" name="nombre" class="form-control" placeholder="Nombre de la canción" required>
+                            <input type="text" name="nombre" class="form-control" required>
                         </div>
 
                         <div class="row g-2 mb-2">
@@ -213,7 +203,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
             </div>
         </div>
 
-        <!-- Tabla de canciones -->
         <div class="col-lg-9">
             <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
                 <table class="table table-dark table-bordered table-hover align-middle text-center">
@@ -232,7 +221,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                     <tbody>
                         <?php if (count($canciones) > 0): ?>
                             <?php foreach ($canciones as $c): ?>
-                                <?php 
+                                <?php
                                     $url_cancion = $ruta_base . ltrim($c['ruta_archivo'], '/');
                                     $qr_api = "https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=" . urlencode($url_cancion);
                                     $estrellas = max(1, min(5, (int)$c['calificacion']));
@@ -273,7 +262,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
 
     <hr class="my-4">
 
-    <!-- SECCIÓN USUARIOS -->
     <h3 class="mb-3">👥 Gestión de Usuarios</h3>
     <div class="row g-4">
         <div class="col-lg-3">
@@ -288,7 +276,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                         </div>
                         <div class="mb-2">
                             <label class="form-label">Contraseña</label>
-                            <input type="password" name="password" class="form-control" required>
+                            <input type="text" name="password" class="form-control" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Rol</label>
@@ -310,6 +298,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                         <tr>
                             <th>ID</th>
                             <th>Usuario</th>
+                            <th>Contraseña</th>
                             <th>Rol</th>
                             <th>Acción</th>
                         </tr>
@@ -319,6 +308,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                             <tr>
                                 <td><?= (int)$u['id_usuario'] ?></td>
                                 <td><?= htmlspecialchars($u['nombre_usuario']) ?></td>
+                                <td><?= htmlspecialchars($u['password']) ?></td>
                                 <td>
                                     <span class="badge <?= ($u['rol'] === 'admin') ? 'bg-warning text-dark' : 'bg-secondary' ?>">
                                         <?= htmlspecialchars($u['rol']) ?>

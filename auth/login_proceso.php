@@ -6,11 +6,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nombre_usuario = trim($_POST['nombre_usuario']);
     $password = $_POST['password'];
 
-    $stmt = $pdo->prepare("SELECT id_usuario, nombre_usuario, password_hash, rol FROM usuarios WHERE nombre_usuario = ?");
+    $stmt = $pdo->prepare("SELECT id_usuario, nombre_usuario, password, rol FROM usuarios WHERE nombre_usuario = ?");
     $stmt->execute([$nombre_usuario]);
     $usuario = $stmt->fetch();
 
-    if ($usuario && password_verify($password, $usuario['password_hash'])) {
+    if ($usuario && $password === $usuario['password']) {
         $_SESSION['id_usuario'] = $usuario['id_usuario'];
         $_SESSION['nombre_usuario'] = $usuario['nombre_usuario'];
         $_SESSION['rol'] = $usuario['rol'];
