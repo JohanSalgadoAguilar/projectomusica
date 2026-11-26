@@ -1,6 +1,5 @@
 <?php
 session_start();
-// Si ya inició sesión, mandarlo directo al reproductor
 if (isset($_SESSION['id_usuario'])) {
     header("Location: reproductor.php");
     exit;
@@ -31,8 +30,8 @@ if (isset($_SESSION['id_usuario'])) {
                     <h3 class="text-center mb-4">Iniciar Sesión</h3>
                     <form action="auth/login_proceso.php" method="POST">
                         <div class="mb-3">
-                            <label class="form-label">Correo electrónico</label>
-                            <input type="email" name="correo" class="form-control" required>
+                            <label class="form-label">Usuario</label>
+                            <input type="text" name="nombre_usuario" class="form-control" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Contraseña</label>
@@ -46,10 +45,7 @@ if (isset($_SESSION['id_usuario'])) {
                     <h5 class="text-center mb-3">¿No tienes cuenta? Regístrate</h5>
                     <form action="auth/registro_proceso.php" method="POST">
                         <div class="mb-2">
-                            <input type="text" name="nombre_usuario" class="form-control form-control-sm" placeholder="Nombre de usuario" required>
-                        </div>
-                        <div class="mb-2">
-                            <input type="email" name="correo" class="form-control form-control-sm" placeholder="Correo electrónico" required>
+                            <input type="text" name="nombre_usuario" class="form-control form-control-sm" placeholder="Nuevo usuario" required>
                         </div>
                         <div class="mb-3">
                             <input type="password" name="password" class="form-control form-control-sm" placeholder="Contraseña" required>

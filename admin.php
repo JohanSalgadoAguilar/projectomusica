@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $nombre       = trim($_POST['nombre']);
         $tipo         = trim($_POST['tipo']) ?: 'MP3';
         $duracion     = trim($_POST['duracion']) ?: '03:00';
-        $calificacion = max(1, min(5, (int)$_POST['calificacion'])); // Asegura rango 1-5
+        $calificacion = max(1, min(5, (int)$_POST['calificacion']));
 
         if (!isset($carpetas_genero[$id_genero])) {
             $error = "Género inválido.";
@@ -79,19 +79,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 3. AÑADIR USUARIO
+    // 3. AÑADIR USUARIO (Solo usuario y contraseña)
     if ($accion === 'agregar_usuario') {
         $nombre_usuario = trim($_POST['nombre_usuario']);
-        $correo         = trim($_POST['correo']);
         $password_hash  = password_hash($_POST['password'], PASSWORD_DEFAULT);
         $rol            = ($_POST['rol'] === 'admin') ? 'admin' : 'consultor';
 
         try {
-            $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, correo, password_hash, rol) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$nombre_usuario, $correo, $password_hash, $rol]);
+            $stmt = $pdo->prepare("INSERT INTO usuarios (nombre_usuario, password_hash, rol) VALUES (?, ?, ?)");
+            $stmt->execute([$nombre_usuario, $password_hash, $rol]);
             $mensaje = "Usuario creado con rol '$rol'.";
         } catch (PDOException $e) {
-            $error = "El correo o nombre de usuario ya existe.";
+            $error = "Ese nombre de usuario ya existe.";
         }
     }
 
@@ -108,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Consultas
+// Consultas para llenar las tablas
 $generos = $pdo->query("SELECT * FROM generos ORDER BY id_genero ASC")->fetchAll();
 
 $canciones = $pdo->query("
@@ -118,9 +117,9 @@ $canciones = $pdo->query("
     ORDER BY c.id_cancion DESC
 ")->fetchAll();
 
-$usuarios = $pdo->query("SELECT id_usuario, nombre_usuario, correo, rol FROM usuarios ORDER BY id_usuario ASC")->fetchAll();
+$usuarios = $pdo->query("SELECT id_usuario, nombre_usuario, rol FROM usuarios ORDER BY id_usuario ASC")->fetchAll();
 
-// Construir URL base del sitio (InfinityFree o localhost) para que el QR abra el audio
+// URL base del sitio para generar los códigos QR
 $protocolo = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
 $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/\\') . '/';
 ?>
@@ -136,7 +135,8 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
 
 <nav class="navbar navbar-dark bg-black px-4 mb-4">
     <span class="navbar-brand">⚙️ Panel Admin</span>
-    <div class="d-flex gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <span class="me-2">Admin: <strong><?= htmlspecialchars($_SESSION['nombre_usuario']) ?></strong></span>
         <a href="reproductor.php" class="btn btn-sm btn-outline-light">Ir al Reproductor</a>
         <a href="auth/logout.php" class="btn btn-sm btn-danger">Cerrar Sesión</a>
     </div>
@@ -153,7 +153,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
     <!-- SECCIÓN MÚSICA -->
     <h3 class="mb-3">🎵 Gestión de Música</h3>
     <div class="row g-4 mb-5">
-        <!-- Formulario para agregar -->
         <div class="col-lg-3">
             <div class="card bg-secondary text-white">
                 <div class="card-body">
@@ -163,7 +162,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                         
                         <div class="mb-2">
                             <label class="form-label">Nombre</label>
-                            <input type="text" name="nombre" class="form-control" placeholder="Ej. Bohemian Rhapsody" required>
+                            <input type="text" name="nombre" class="form-control" placeholder="Nombre de la canción" required>
                         </div>
 
                         <div class="row g-2 mb-2">
@@ -187,7 +186,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                                 <label class="form-label">Género</label>
                                 <select name="id_genero" class="form-select" required>
                                     <?php foreach ($generos as $g): ?>
-                                        <option value="<?= $g['id_genero'] ?>"><?= htmlspecialchars($g['nombre']) ?></option>
+                                        <option value="<?= (int)$g['id_genero'] ?>"><?= htmlspecialchars($g['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -214,7 +213,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
             </div>
         </div>
 
-        <!-- Tabla exacta del pizarrón -->
+        <!-- Tabla de canciones -->
         <div class="col-lg-9">
             <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
                 <table class="table table-dark table-bordered table-hover align-middle text-center">
@@ -234,8 +233,9 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                         <?php if (count($canciones) > 0): ?>
                             <?php foreach ($canciones as $c): ?>
                                 <?php 
-                                    $url_cancion = $ruta_base . $c['ruta_archivo'];
+                                    $url_cancion = $ruta_base . ltrim($c['ruta_archivo'], '/');
                                     $qr_api = "https://api.qrserver.com/v1/create-qr-code/?size=70x70&data=" . urlencode($url_cancion);
+                                    $estrellas = max(1, min(5, (int)$c['calificacion']));
                                 ?>
                                 <tr>
                                     <td class="text-start fw-semibold"><?= htmlspecialchars($c['nombre']) ?></td>
@@ -243,18 +243,18 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                                     <td><?= htmlspecialchars($c['duracion']) ?></td>
                                     <td><span class="badge bg-primary"><?= htmlspecialchars($c['genero_nombre']) ?></span></td>
                                     <td class="text-warning fs-5">
-                                        <?= str_repeat('★', (int)$c['calificacion']) . str_repeat('☆', 5 - (int)$c['calificacion']) ?>
+                                        <?= str_repeat('★', $estrellas) . str_repeat('☆', 5 - $estrellas) ?>
                                     </td>
                                     <td><?= date('d/m/Y', strtotime($c['fecha_subida'])) ?></td>
                                     <td>
                                         <a href="<?= htmlspecialchars($url_cancion) ?>" target="_blank" title="Abrir audio">
-                                            <img src="<?= $qr_api ?>" alt="QR" width="55" height="55" class="bg-white p-1 rounded">
+                                            <img src="<?= htmlspecialchars($qr_api) ?>" alt="QR" width="55" height="55" class="bg-white p-1 rounded">
                                         </a>
                                     </td>
                                     <td>
                                         <form method="POST" onsubmit="return confirm('¿Eliminar esta canción?');" class="d-inline">
                                             <input type="hidden" name="accion" value="eliminar_cancion">
-                                            <input type="hidden" name="id_cancion" value="<?= $c['id_cancion'] ?>">
+                                            <input type="hidden" name="id_cancion" value="<?= (int)$c['id_cancion'] ?>">
                                             <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
                                         </form>
                                     </td>
@@ -283,12 +283,8 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                     <form method="POST">
                         <input type="hidden" name="accion" value="agregar_usuario">
                         <div class="mb-2">
-                            <label class="form-label">Nombre de usuario</label>
+                            <label class="form-label">Usuario</label>
                             <input type="text" name="nombre_usuario" class="form-control" required>
-                        </div>
-                        <div class="mb-2">
-                            <label class="form-label">Correo</label>
-                            <input type="email" name="correo" class="form-control" required>
                         </div>
                         <div class="mb-2">
                             <label class="form-label">Contraseña</label>
@@ -314,7 +310,6 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                         <tr>
                             <th>ID</th>
                             <th>Usuario</th>
-                            <th>Correo</th>
                             <th>Rol</th>
                             <th>Acción</th>
                         </tr>
@@ -322,9 +317,8 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                     <tbody>
                         <?php foreach ($usuarios as $u): ?>
                             <tr>
-                                <td><?= $u['id_usuario'] ?></td>
+                                <td><?= (int)$u['id_usuario'] ?></td>
                                 <td><?= htmlspecialchars($u['nombre_usuario']) ?></td>
-                                <td><?= htmlspecialchars($u['correo']) ?></td>
                                 <td>
                                     <span class="badge <?= ($u['rol'] === 'admin') ? 'bg-warning text-dark' : 'bg-secondary' ?>">
                                         <?= htmlspecialchars($u['rol']) ?>
@@ -334,7 +328,7 @@ $ruta_base = $protocolo . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SE
                                     <?php if ((int)$u['id_usuario'] !== (int)$_SESSION['id_usuario']): ?>
                                         <form method="POST" onsubmit="return confirm('¿Eliminar este usuario?');" class="d-inline">
                                             <input type="hidden" name="accion" value="eliminar_usuario">
-                                            <input type="hidden" name="id_usuario" value="<?= $u['id_usuario'] ?>">
+                                            <input type="hidden" name="id_usuario" value="<?= (int)$u['id_usuario'] ?>">
                                             <button type="submit" class="btn btn-sm btn-danger">Eliminar</button>
                                         </form>
                                     <?php else: ?>

@@ -1,12 +1,13 @@
 <?php
-// Credenciales (Cámbialas por las de InfinityFree al subirlo)
-$host = 'localhost';          // En InfinityFree es algo como: sql204.infinityfree.com
-$db   = 'musica_db';          // En InfinityFree es algo como: if0_37482910_musica
-$user = 'root';               // En InfinityFree es algo como: if0_37482910
-$pass = '';                   // La contraseña de tu cuenta de hosting
+// Credenciales de InfinityFree para musicproject.infinityfree.me
+$host    = 'sql304.infinityfree.com';
+$db      = 'if0_43534808_musica';
+$user    = 'if0_43534808';
+$pass    = 'UxtfjTzVoXm0Ym';
+$port    = '3306';
 $charset = 'utf8mb4';
 
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
+$dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
 $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
